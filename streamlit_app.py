@@ -78,10 +78,13 @@ with st.sidebar:
 st.title("📊 AI Analytics Copilot")
 st.caption("Ask a business question about a demo retail dataset: 2024–2025 orders, customers and products.")
 
-cols = st.columns(len(EXAMPLES))
-for col, example in zip(cols, EXAMPLES):
-    if col.button(example, use_container_width=True):
-        st.session_state.question = example
+def _use_example() -> None:
+    if st.session_state.example:
+        st.session_state.question = st.session_state.example
+
+
+st.selectbox("Try an example", [""] + EXAMPLES, key="example", on_change=_use_example,
+             format_func=lambda q: q or "Pick an example question...")
 
 question = st.text_area("Your question", key="question", height=80,
                         placeholder="e.g. Which city generated the most delivered revenue?")
