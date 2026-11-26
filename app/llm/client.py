@@ -63,7 +63,10 @@ class OpenAICompatibleClient:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        # A real User-Agent: some providers sit behind Cloudflare, which rejects
+        # the default "Python-urllib" agent with HTTP 403.
+        headers = {"Content-Type": "application/json", "Accept": "application/json",
+                   "User-Agent": "ai-analytics-copilot/0.2 (+https://github.com/Gauravkumar45/AI-Analytics-Copilot)"}
         if self.settings.llm_api_key:
             headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
         request = urllib.request.Request(
@@ -81,6 +84,10 @@ class OpenAICompatibleClient:
             detail = exc.read().decode("utf-8", errors="ignore")[:300]
             if exc.code == 401:
                 raise LLMError("LLM API key is missing or invalid (set GROQ_API_KEY or LLM_API_KEY)") from exc
+            if exc.code == 403:
+                raise LLMError(f"LLM request forbidden (HTTP 403): {detail}") from exc
+            if exc.code == 404:
+                raise LLMError(f"Model '{self.model}' not found at {self.settings.llm_base_url}: {detail}") from exc
             if exc.code == 429:
                 raise LLMError("LLM rate limit reached; try again in a minute") from exc
             raise LLMError(f"LLM HTTP {exc.code}: {detail}") from exc
