@@ -2,6 +2,7 @@ import re
 from io import BytesIO
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+PROTECTED_TABLES = {"customers", "products", "orders", "order_items"}
 
 
 class DataUploadError(ValueError):
@@ -10,9 +11,11 @@ class DataUploadError(ValueError):
 
 class DataService:
     def __init__(self) -> None:
-        from app.services.sql_service import SqlService
+        from app.core.settings import get_settings
+        from app.sql.executor import Database
 
-        self.sql_service = SqlService()
+        self.settings = get_settings()
+        self.db = Database(self.settings)
 
     @staticmethod
     def normalize_identifier(value: str, fallback: str) -> str:
@@ -40,7 +43,6 @@ class DataService:
 
     def import_csv(self, filename: str, content: bytes, table_name: str | None = None) -> tuple[str, int, list[str]]:
         import pandas as pd
-        from sqlalchemy.exc import SQLAlchemyError
 
         if not content:
             raise DataUploadError("The uploaded CSV is empty")
@@ -80,16 +82,20 @@ class DataService:
             columns.append(normalized)
         dataframe.columns = columns
 
+        if target_table in PROTECTED_TABLES:
+            raise DataUploadError(f"'{target_table}' is a demo table; choose another table name")
         try:
-            dataframe.to_sql(
-                target_table,
-                self.sql_service.engine,
-                schema="public",
-                if_exists="replace",
-                index=False,
-                method="multi",
-                chunksize=1_000,
-            )
-        except SQLAlchemyError as exc:
+            if self.settings.is_sqlite:
+                import sqlite3
+                from contextlib import closing
+
+                from app.sql.executor import _sqlite_path
+
+                with closing(sqlite3.connect(_sqlite_path(self.settings.database_url))) as conn:
+                    dataframe.to_sql(target_table, conn, if_exists="replace", index=False, chunksize=1_000)
+            else:
+                dataframe.to_sql(target_table, self.db.engine, schema="public", if_exists="replace",
+                                 index=False, method="multi", chunksize=1_000)
+        except Exception as exc:  # driver-specific errors
             raise DataUploadError("The CSV could not be imported into the analytics database") from exc
         return target_table, len(dataframe), columns

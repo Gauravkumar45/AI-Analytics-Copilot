@@ -1,80 +1,129 @@
-import json
 import os
+
+import pandas as pd
 import requests
 import streamlit as st
 
-BACKEND_URL = st.secrets.get("backend_url", "http://backend:8002")
-BACKEND_PUBLIC_URL = st.secrets.get("backend_public_url", os.environ.get("BACKEND_PUBLIC_URL", "http://localhost:8002"))
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8002").rstrip("/")
 
-st.set_page_config(page_title="AI Analytics Copilot", page_icon="🤖", layout="wide")
+EXAMPLES = [
+    "What is the total delivered revenue by product category?",
+    "How many orders were placed each month in 2024?",
+    "Who are the top 5 customers by delivered revenue?",
+    "What is the cancellation rate by sales channel, as a percentage?",
+    "What was the year-over-year growth in delivered revenue from 2024 to 2025?",
+]
 
-st.title("AI Analytics Copilot")
-st.markdown("Enter a business question and let the system generate SQL, execute it, analyze the results, and render visuals.")
+st.set_page_config(page_title="AI Analytics Copilot", page_icon="📊", layout="wide")
 
-if "target_table" not in st.session_state:
-    st.session_state.target_table = ""
 
-uploaded_file = st.file_uploader("Upload a CSV dataset", type=["csv"])
-if uploaded_file and st.button("Import CSV into analytics database"):
+def api_error(exc: requests.RequestException) -> str:
+    if exc.response is not None:
+        try:
+            return exc.response.json().get("detail", str(exc))
+        except ValueError:
+            pass
+    return str(exc)
+
+
+@st.cache_data(ttl=60)
+def health() -> dict:
     try:
-        response = requests.post(
-            f"{BACKEND_URL}/api/data/upload",
-            files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
-            timeout=120,
-        )
-        response.raise_for_status()
-        upload_result = response.json()
-        st.session_state.target_table = upload_result["table_name"]
-        st.success(
-            f"Imported {upload_result['rows']} rows into '{upload_result['table_name']}' "
-            f"with columns: {', '.join(upload_result['columns'])}"
-        )
-    except requests.RequestException as exc:
-        detail = ""
-        if exc.response is not None:
-            try:
-                detail = exc.response.json().get("detail", "")
-            except ValueError:
-                pass
-        st.error(detail or f"Upload failed: {exc}")
+        return requests.get(f"{BACKEND_URL}/api/health", timeout=10).json()
+    except requests.RequestException:
+        return {}
 
-with st.form("ask_form"):
-    question = st.text_area("Ask a question", height=120)
-    table_name = st.text_input("Target table name (optional)", key="target_table")
-    time_range = st.text_input("Time range filter (optional)")
-    submitted = st.form_submit_button("Run Analytics")
 
-if submitted and question:
-    payload = {
-        "question": question,
-        "table_name": table_name or None,
-        "time_range": time_range or None,
-    }
-    try:
-        response = requests.post(f"{BACKEND_URL}/api/ai/ask", json=payload, timeout=240)
-        response.raise_for_status()
-        result = response.json()
+info = health()
 
-        st.subheader("Generated SQL")
-        st.code(result.get("sql", ""), language="sql")
+with st.sidebar:
+    st.header("About")
+    st.markdown(
+        "A **LangGraph agent** turns questions into SQL. It inspects the data with tools, "
+        "validates every query through a read-only SQL guard, repairs its own errors, then "
+        "charts and explains the result."
+    )
+    if info:
+        st.caption(f"Model: `{info.get('model')}` · Database: {info.get('database')}")
+        st.markdown("**Tables:** " + ", ".join(f"`{t}`" for t in info.get("tables", [])))
+        if not info.get("llm_key_configured"):
+            st.warning("No LLM API key configured on the server.")
+    else:
+        st.error("Backend is not reachable.")
+    st.divider()
+    st.subheader("Bring your own data")
+    uploaded = st.file_uploader("Upload a CSV (max 10 MB)", type=["csv"])
+    if uploaded and st.button("Import CSV"):
+        try:
+            r = requests.post(f"{BACKEND_URL}/api/data/upload",
+                              files={"file": (uploaded.name, uploaded.getvalue(), "text/csv")}, timeout=120)
+            r.raise_for_status()
+            res = r.json()
+            st.success(f"Imported {res['rows']} rows into `{res['table_name']}`")
+            health.clear()
+        except requests.RequestException as exc:
+            st.error(api_error(exc))
 
-        if result.get("chart_html"):
-            st.subheader("Chart")
-            st.components.v1.html(result["chart_html"], height=500)
+st.title("📊 AI Analytics Copilot")
+st.caption("Ask a business question about the demo retail dataset (2024–2025 orders, customers and products).")
 
-        st.subheader("Business Insight")
-        st.write(result.get("insight", "No insight generated."))
+cols = st.columns(len(EXAMPLES))
+for col, example in zip(cols, EXAMPLES):
+    if col.button(example, use_container_width=True):
+        st.session_state.question = example
 
-        if result.get("report_url"):
-            report_url = result["report_url"]
-            if report_url.startswith("/"):
-                report_url = f"{BACKEND_PUBLIC_URL.rstrip('/')}{report_url}"
-            st.markdown(f"[Download PDF report]({report_url})")
-    except requests.RequestException as exc:
-        detail = ""
-        if exc.response is not None:
-            try:
-                detail = exc.response.json().get("detail", "")
-            except ValueError:
-                pass
-        st.error(detail or f"Backend request failed: {exc}")
+question = st.text_area("Your question", key="question", height=80,
+                        placeholder="e.g. Which city generated the most delivered revenue?")
+run = st.button("Ask", type="primary")
+
+if run and question.strip():
+    with st.spinner("Agent is planning, querying and validating..."):
+        try:
+            r = requests.post(f"{BACKEND_URL}/api/ai/ask", json={"question": question}, timeout=180)
+            r.raise_for_status()
+            st.session_state.result = r.json()
+        except requests.RequestException as exc:
+            st.session_state.result = None
+            st.error(api_error(exc))
+
+result = st.session_state.get("result")
+if result:
+    if result["status"] != "ok":
+        st.error(result["answer"])
+    else:
+        st.subheader("Answer")
+        st.write(result["answer"])
+
+    usage = result.get("usage", {})
+    m = st.columns(5)
+    m[0].metric("Latency", f"{result.get('total_ms', 0) / 1000:.1f} s")
+    m[1].metric("LLM calls", usage.get("llm_calls", 0))
+    m[2].metric("Tokens", usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0))
+    m[3].metric("Est. cost", f"${usage.get('cost_usd', 0):.4f}")
+    m[4].metric("Repairs", result.get("attempts", 0))
+
+    if result.get("chart_html"):
+        st.components.v1.html(result["chart_html"], height=440)
+    if result.get("rows"):
+        st.markdown(f"**Result** ({result['row_count']} rows{', truncated' if result.get('truncated') else ''})")
+        st.dataframe(pd.DataFrame(result["rows"]), use_container_width=True, hide_index=True)
+
+    with st.expander("Generated SQL", expanded=result["status"] != "ok"):
+        if result.get("explanation"):
+            st.caption(result["explanation"])
+        st.code(result.get("sql") or "-", language="sql")
+
+    with st.expander("Agent trace"):
+        st.dataframe(pd.DataFrame([{"step": s["node"], "ms": s["ms"],
+                                    "detail": ", ".join(f"{k}={v}" for k, v in s.get("detail", {}).items())}
+                                   for s in result.get("steps", [])]),
+                     use_container_width=True, hide_index=True)
+
+    if result.get("report_url"):
+        try:
+            pdf = requests.get(f"{BACKEND_URL}{result['report_url']}", timeout=30)
+            pdf.raise_for_status()
+            st.download_button("Download PDF report", pdf.content, file_name="analytics_report.pdf",
+                               mime="application/pdf")
+        except requests.RequestException:
+            pass
