@@ -12,8 +12,8 @@ REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(
     title="AI Analytics Copilot",
-    description="Backend API for analytics automation using Ollama, SQL, Pandas, Plotly, and PDF reporting.",
-    version="0.1.0",
+    description="Agentic Text-to-SQL analytics API: LangGraph agent, tool calling, SQL safety guard, Plotly charts and PDF reports.",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -26,3 +26,13 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 app.mount("/reports", StaticFiles(directory=REPORT_DIR), name="reports")
+
+
+@app.get("/api/health", tags=["health"])
+def health() -> dict:
+    from app.core.settings import get_settings
+    from app.sql.executor import Database
+
+    settings = get_settings()
+    return {"status": "ok", "model": settings.llm_model, "database": settings.sql_dialect,
+            "tables": Database(settings).list_tables(), "llm_key_configured": bool(settings.llm_api_key)}

@@ -1,60 +1,9 @@
+# Local run of the same image deployed to Hugging Face Spaces.
+#   cp .env.example .env   # add GROQ_API_KEY
+#   docker compose up --build   ->  http://localhost:7860
 services:
-  postgres:
-    image: postgres:16
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: analytics
+  copilot:
+    build: .
+    env_file: .env
     ports:
-      - "5434:5434"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7
-    ports:
-      - "6378:6378"
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11435:11434"
-    volumes:
-      - /usr/share/ollama/.ollama:/root/.ollama
-
-  backend:
-    build:
-      context: .
-      dockerfile: docker/backend.Dockerfile
-    environment:
-      DATABASE_URL: postgresql+psycopg://admin:password@postgres:5432/analytics
-      OLLAMA_HOST: http://ollama:11434
-      OLLAMA_MODEL: qwen2.5:7b
-      OLLAMA_TIMEOUT_SECONDS: "180"
-      SECRET_KEY: supersecret
-      JWT_ALGORITHM: HS256
-    depends_on:
-      - postgres
-      - redis
-      - ollama
-    ports:
-      - "8002:8002"
-    volumes:
-      - .:/app
-
-  frontend:
-    build:
-      context: .
-      dockerfile: docker/frontend.Dockerfile
-    environment:
-      STREAMLIT_SERVER_HEADLESS: "true"
-      BACKEND_PUBLIC_URL: http://localhost:8002
-    depends_on:
-      - backend
-    ports:
-      - "8501:8501"
-    volumes:
-      - .:/app
-
-volumes:
-  postgres_data:
+      - "7860:7860"

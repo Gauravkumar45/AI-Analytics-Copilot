@@ -1,27 +1,19 @@
-from app.services.ai_service import AiService
+from functools import lru_cache
+
+from app.llm.client import OpenAICompatibleClient
 from app.services.auth_service import AuthService
 from app.services.chart_service import ChartService
 from app.services.data_service import DataService
-from app.services.insight_service import InsightService
-from app.services.pandas_service import PandasService
 from app.services.report_service import ReportService
-from app.services.sql_service import SqlService
 
 
-def get_ai_service() -> AiService:
-    return AiService()
+@lru_cache
+def get_llm() -> OpenAICompatibleClient:
+    return OpenAICompatibleClient()
 
 
 def get_auth_service() -> AuthService:
     return AuthService()
-
-
-def get_sql_service() -> SqlService:
-    return SqlService()
-
-
-def get_pandas_service() -> PandasService:
-    return PandasService()
 
 
 def get_chart_service() -> ChartService:
@@ -30,10 +22,6 @@ def get_chart_service() -> ChartService:
 
 def get_data_service() -> DataService:
     return DataService()
-
-
-def get_insight_service() -> InsightService:
-    return InsightService()
 
 
 def get_report_service() -> ReportService:
