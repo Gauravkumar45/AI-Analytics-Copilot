@@ -40,7 +40,7 @@ class ChatModel(Protocol):
     model: str
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
-             temperature: float = 0.0, max_tokens: int = 700) -> LLMResponse: ...
+             temperature: float = 0.0, max_tokens: int = 2000) -> LLMResponse: ...
 
 
 class OpenAICompatibleClient:
@@ -49,13 +49,16 @@ class OpenAICompatibleClient:
         self.model = self.settings.llm_model
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None,
-             temperature: float = 0.0, max_tokens: int = 700) -> LLMResponse:
+             temperature: float = 0.0, max_tokens: int = 2000) -> LLMResponse:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if self.settings.llm_reasoning_effort and "gpt-oss" in self.model:
+            # Reasoning tokens count toward max_tokens; low effort keeps calls fast and cheap.
+            payload["reasoning_effort"] = self.settings.llm_reasoning_effort
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"

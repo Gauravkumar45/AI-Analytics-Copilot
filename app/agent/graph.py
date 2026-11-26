@@ -190,7 +190,7 @@ class CopilotAgent:
                    "result_preview": a["preview"][:15], "truncated": state.get("truncated", False)}
         try:
             resp = self.llm.chat([{"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                                  {"role": "user", "content": json.dumps(payload, default=str)}], max_tokens=200)
+                                  {"role": "user", "content": json.dumps(payload, default=str)}], max_tokens=800)
             answer = (resp.content or "").strip() or _fallback_answer(a)
             usage = self._usage(state, resp)
         except LLMError:

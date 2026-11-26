@@ -24,11 +24,13 @@ class Settings:
     # LLM
     llm_base_url: str = field(default_factory=lambda: _env("LLM_BASE_URL", "https://api.groq.com/openai/v1"))
     llm_api_key: str | None = field(default_factory=lambda: _env("LLM_API_KEY") or _env("GROQ_API_KEY"))
-    llm_model: str = field(default_factory=lambda: _env("LLM_MODEL", "llama-3.3-70b-versatile"))
+    llm_model: str = field(default_factory=lambda: _env("LLM_MODEL", "openai/gpt-oss-120b"))
+    # low | medium | high for reasoning models (gpt-oss); empty to omit the parameter.
+    llm_reasoning_effort: str | None = field(default_factory=lambda: _env("LLM_REASONING_EFFORT", "low"))
     llm_timeout_seconds: int = field(default_factory=lambda: int(_env("LLM_TIMEOUT_SECONDS", "60")))
     # USD per 1M tokens, for cost tracking. Set to your provider's current price.
-    price_in_per_m: float = field(default_factory=lambda: float(_env("LLM_PRICE_IN_PER_M", "0.59")))
-    price_out_per_m: float = field(default_factory=lambda: float(_env("LLM_PRICE_OUT_PER_M", "0.79")))
+    price_in_per_m: float = field(default_factory=lambda: float(_env("LLM_PRICE_IN_PER_M", "0.15")))
+    price_out_per_m: float = field(default_factory=lambda: float(_env("LLM_PRICE_OUT_PER_M", "0.60")))
 
     # Database: the SQLite demo DB by default, or PostgreSQL via DATABASE_URL.
     database_url: str = field(default_factory=lambda: _env("DATABASE_URL", f"sqlite:///{DEMO_DB_PATH}"))
