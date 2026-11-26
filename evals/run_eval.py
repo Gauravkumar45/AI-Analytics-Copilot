@@ -117,7 +117,7 @@ def run(limit: int | None, out_dir: Path) -> dict:
         print(f"[{mark}] {q['id']} ({q['difficulty']}) {elapsed:.0f} ms  {q['question']}")
         if not correct:
             print(f"        sql: {state.get('sql')}\n        error: {error}")
-        time.sleep(0.5)  # stay under free-tier rate limits
+        time.sleep(float(__import__('os').environ.get('EVAL_PAUSE_SECONDS', '3')))  # free-tier pacing
 
     summary = summarize(records, settings)
     out_dir.mkdir(parents=True, exist_ok=True)

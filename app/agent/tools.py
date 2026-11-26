@@ -25,8 +25,8 @@ TOOL_SCHEMAS = [
         "parameters": {"type": "object", "properties": {
             "sql": {"type": "string", "description": "One SELECT/WITH query"},
             "chart_type": {"type": "string", "enum": CHART_TYPES},
-            "x": {"type": "string", "description": "result column for the x axis / labels"},
-            "y": {"type": "string", "description": "numeric result column for the y axis / values"},
+            "x": {"type": ["string", "null"], "description": "result column for the x axis / labels; null for table"},
+            "y": {"type": ["string", "null"], "description": "numeric result column for the y axis / values; null for table"},
             "explanation": {"type": "string", "description": "one sentence on what the query computes"}},
             "required": ["sql", "chart_type"]}}},
 ]
