@@ -3,12 +3,17 @@ import plotly.express as px
 
 class ChartService:
     def build_from_spec(self, df, spec: dict) -> str | None:
-        """Render the chart the agent chose (bar, line, pie, scatter) or nothing for 'table'."""
+        """Render the chart the agent chose (bar, line, pie, scatter) as HTML, or None for 'table'."""
+        fig = self.build_figure(df, spec)
+        return fig.to_html(full_html=False, include_plotlyjs="cdn") if fig is not None else None
+
+    def build_figure(self, df, spec: dict):
+        """Plotly figure for the agent's chart choice, or None when a table fits better."""
         if df.empty or not spec or spec.get("type") == "table":
             return None
         x, y, kind = spec.get("x"), spec.get("y"), spec.get("type", "bar")
         if x not in df.columns or y not in df.columns:
-            return self.build_chart_html(df)
+            return None
         if kind == "line":
             fig = px.line(df, x=x, y=y, markers=True)
         elif kind == "pie":
@@ -18,7 +23,7 @@ class ChartService:
         else:
             fig = px.bar(df, x=x, y=y)
         fig.update_layout(margin=dict(l=20, r=20, t=30, b=20), height=420)
-        return fig.to_html(full_html=False, include_plotlyjs="cdn")
+        return fig
 
     def build_chart_html(self, df) -> str | None:
         if df.empty:

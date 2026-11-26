@@ -1,19 +1,8 @@
----
-title: AI Analytics Copilot
-emoji: 📊
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
-short_description: Agentic Text-to-SQL with LangGraph, SQL guardrails and evals
----
-
 # AI Analytics Copilot: Agentic Text-to-SQL
 
 Ask a business question in plain English and get the SQL, a chart, a data table, a short written answer and a PDF report. A **LangGraph agent** inspects the data with tools, writes SQL, checks it through a **read-only SQL guard**, repairs its own mistakes, and reports latency, tokens and cost for every request.
 
-**Live demo:** _add your Hugging Face Space URL here_
+**Live demo:** _add your Streamlit Community Cloud URL here_
 
 ## How it works
 
@@ -82,16 +71,17 @@ BACKEND_URL=http://localhost:8002 streamlit run frontend/streamlit_app.py
 
 The API docs are at `http://localhost:8002/docs`. Set `DATABASE_URL=postgresql://…` to point the agent at your own PostgreSQL database.
 
-## Deploy to Hugging Face Spaces (free)
+## Deploy free on Streamlit Community Cloud
 
-1. Create a Space at huggingface.co/new-space and choose **Docker** → **Blank**.
-2. In the Space, open **Settings → Variables and secrets** and add the secret `GROQ_API_KEY`.
-3. Push this repository to the Space:
-   ```bash
-   git remote add space https://huggingface.co/spaces/<your-username>/ai-analytics-copilot
-   git push space main
+1. Sign in at **share.streamlit.io** with GitHub.
+2. **Create app → Deploy a public app from GitHub**: repository `Gauravkumar45/AI-Analytics-Copilot`, branch `main`, main file `streamlit_app.py`.
+3. **Advanced settings**: Python 3.12, and under *Secrets* add:
+   ```toml
+   GROQ_API_KEY = "gsk_..."
    ```
-4. The Space builds the Dockerfile, seeds the demo database and serves the app on port 7860.
+4. Deploy. The app seeds the demo database on first start and redeploys on every push to `main`.
+
+`streamlit_app.py` runs the agent in-process. The FastAPI + Streamlit pair (`app/main.py`, `frontend/streamlit_app.py`) and the `Dockerfile` remain for self-hosted deployments.
 
 ## API
 
