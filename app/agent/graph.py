@@ -25,7 +25,7 @@ from app.agent.prompts import (POSTGRES_DATE_HINT, SQL_SYSTEM_PROMPT, SQLITE_DAT
                                SUMMARY_SYSTEM_PROMPT)
 from app.agent.tools import CHART_TYPES, TOOL_SCHEMAS, run_tool
 from app.core.settings import Settings, get_settings
-from app.llm.client import ChatModel, LLMError, LLMResponse, estimate_cost
+from app.llm.client import ChatModel, LLMError, LLMResponse, ToolCallRejected, estimate_cost
 from app.sql.executor import Database, QueryError
 from app.sql.guard import UnsafeSQLError, check_sql, extract_sql
 
@@ -101,6 +101,14 @@ class CopilotAgent:
         t = time.perf_counter()
         try:
             resp = self.llm.chat(state["messages"], tools=TOOL_SCHEMAS)
+        except ToolCallRejected as exc:
+            # The provider rejected the model's tool call: treat it like a bad query and let it retry.
+            attempts = state.get("attempts", 0) + 1
+            msgs = [*state["messages"], {"role": "user", "content":
+                    f"ERROR: {exc}\nCall submit_sql again with valid arguments (use null for x and y when chart_type is table)."}]
+            return {"error": str(exc), "attempts": attempts, "errors": [*state.get("errors", []), str(exc)],
+                    "messages": msgs, "pending_tool_calls": [],
+                    "steps": self._trace(state, "generate_sql", t, error=str(exc), attempt=attempts)}
         except LLMError as exc:
             return {"error": str(exc), "status": "failed", "answer": f"The language model is unavailable: {exc}",
                     "steps": self._trace(state, "generate_sql", t, error=str(exc))}
@@ -208,6 +216,8 @@ class CopilotAgent:
     def route_after_generate(self, state: AgentState) -> str:
         if state.get("status") == "failed":
             return "fail"
+        if state.get("error"):  # rejected tool call: retry generation within the attempt budget
+            return "generate_sql" if state.get("attempts", 0) < self.settings.max_sql_attempts else "fail"
         if state.get("pending_tool_calls"):
             return "run_tools"
         return "validate_sql"
@@ -237,7 +247,8 @@ def build_graph(agent: CopilotAgent):
     g.add_edge(START, "load_schema")
     g.add_edge("load_schema", "generate_sql")
     g.add_conditional_edges("generate_sql", agent.route_after_generate,
-                            {"run_tools": "run_tools", "validate_sql": "validate_sql", "fail": "fail"})
+                            {"run_tools": "run_tools", "validate_sql": "validate_sql",
+                             "generate_sql": "generate_sql", "fail": "fail"})
     g.add_edge("run_tools", "generate_sql")
     g.add_conditional_edges("validate_sql", agent.route_after_validate,
                             {"execute_sql": "execute_sql", "generate_sql": "generate_sql", "fail": "fail"})

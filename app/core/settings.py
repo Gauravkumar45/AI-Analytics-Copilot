@@ -27,6 +27,7 @@ class Settings:
     llm_model: str = field(default_factory=lambda: _env("LLM_MODEL", "openai/gpt-oss-120b"))
     # low | medium | high for reasoning models (gpt-oss); empty to omit the parameter.
     llm_reasoning_effort: str | None = field(default_factory=lambda: _env("LLM_REASONING_EFFORT", "low"))
+    llm_max_retries: int = field(default_factory=lambda: int(_env("LLM_MAX_RETRIES", "4")))
     llm_timeout_seconds: int = field(default_factory=lambda: int(_env("LLM_TIMEOUT_SECONDS", "60")))
     # USD per 1M tokens, for cost tracking. Set to your provider's current price.
     price_in_per_m: float = field(default_factory=lambda: float(_env("LLM_PRICE_IN_PER_M", "0.15")))

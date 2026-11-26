@@ -7,7 +7,7 @@ from pathlib import Path
 
 from app.agent.graph import CopilotAgent, run_agent, run_sequential
 from app.core.settings import Settings
-from app.llm.client import LLMError, LLMResponse, ToolCall
+from app.llm.client import LLMError, LLMResponse, ToolCall, ToolCallRejected
 from app.sql.executor import Database, QueryError
 from app.sql.guard import UnsafeSQLError, check_sql
 from scripts.seed_demo_db import build
@@ -140,6 +140,14 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(state["attempts"], 3)
         self.assertIn("couldn't", state["answer"])
 
+    def test_rejected_tool_call_is_retried(self):
+        llm = FakeLLM(ToolCallRejected("x expected string"),
+                      submit("SELECT COUNT(*) AS n FROM orders", chart="table"))
+        state, llm = self.run_agent(llm)
+        self.assertEqual(state["status"], "ok")
+        self.assertEqual(state["attempts"], 1)
+        self.assertIn("valid arguments", llm.seen[1][-1]["content"])
+
     def test_llm_outage_fails_cleanly(self):
         state, _ = self.run_agent(FakeLLM(LLMError("down")))
         self.assertEqual(state["status"], "failed")
@@ -149,6 +157,33 @@ class AgentTests(unittest.TestCase):
                           settings=settings(), use_langgraph=False)
         self.assertEqual(final["status"], "ok")
         self.assertIn("total_ms", final)
+
+
+class ClientRetryTests(unittest.TestCase):
+    def test_retries_after_429_then_succeeds(self):
+        import io, json, urllib.error
+        from email.message import Message
+        from unittest.mock import patch
+        from app.llm.client import OpenAICompatibleClient
+
+        headers = Message(); headers["retry-after"] = "0"
+        err = urllib.error.HTTPError("u", 429, "Too Many", headers, io.BytesIO(b"{}"))
+        ok = io.BytesIO(json.dumps({"choices": [{"message": {"content": "hi"}}],
+                                    "usage": {"prompt_tokens": 3, "completion_tokens": 1}}).encode())
+        ok.__enter__ = lambda self=ok: self; ok.__exit__ = lambda *a: None
+        with patch("urllib.request.urlopen", side_effect=[err, ok]), patch("time.sleep") as slept:
+            resp = OpenAICompatibleClient(settings(llm_api_key="k")).chat([{"role": "user", "content": "x"}])
+        self.assertEqual(resp.content, "hi")
+        slept.assert_called_once()
+
+    def test_tool_use_failed_raises_repairable_error(self):
+        import io, urllib.error
+        from unittest.mock import patch
+        from app.llm.client import OpenAICompatibleClient
+        body = b'{"error":{"message":"parameters for tool submit_sql did not match schema","code":"tool_use_failed"}}'
+        err = urllib.error.HTTPError("u", 400, "Bad", None, io.BytesIO(body))
+        with patch("urllib.request.urlopen", side_effect=err), self.assertRaises(ToolCallRejected):
+            OpenAICompatibleClient(settings(llm_api_key="k")).chat([{"role": "user", "content": "x"}])
 
 
 if __name__ == "__main__":
