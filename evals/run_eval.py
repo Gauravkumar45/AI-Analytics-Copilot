@@ -85,6 +85,13 @@ def run(limit: int | None, out_dir: Path) -> dict:
 
     conn = sqlite3.connect(f"file:{DEMO_DB_PATH}?mode=ro", uri=True)
     records = []
+    # Fail fast with a clear message if the model endpoint is unusable.
+    from app.llm.client import LLMError
+    try:
+        llm.chat([{"role": "user", "content": "Reply with OK."}], max_tokens=300)
+    except LLMError as exc:
+        sys.exit(f"LLM preflight failed: {exc}")
+
     for q in questions:
         gold = conn.execute(q["gold_sql"]).fetchall()
         started = time.perf_counter()
@@ -108,6 +115,8 @@ def run(limit: int | None, out_dir: Path) -> dict:
         })
         mark = "PASS" if correct else "FAIL"
         print(f"[{mark}] {q['id']} ({q['difficulty']}) {elapsed:.0f} ms  {q['question']}")
+        if not correct:
+            print(f"        sql: {state.get('sql')}\n        error: {error}")
         time.sleep(0.5)  # stay under free-tier rate limits
 
     summary = summarize(records, settings)
