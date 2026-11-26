@@ -1,0 +1,37 @@
+name: Deploy to Hugging Face Space
+
+# Mirrors main to the Space on every push. One-time setup in this GitHub repo:
+#   Settings -> Secrets and variables -> Actions
+#     Secret   HF_TOKEN  = a Hugging Face access token with "write" permission
+#     Variable HF_SPACE  = <hf-username>/<space-name>, e.g. gauravkumar45/ai-analytics-copilot
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        id: cfg
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE" ]; then
+            echo "HF_TOKEN secret or HF_SPACE variable not set; skipping deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.ready == 'true'
+        with: { fetch-depth: 0 }
+      - name: Push to Space
+        if: steps.cfg.outputs.ready == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          git push --force "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" HEAD:main
